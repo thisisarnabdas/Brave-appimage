@@ -1,0 +1,64 @@
+name: Sync with Brave Upstream
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # check every 4 hours
+  workflow_dispatch:          # or trigger manually from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check upstream version
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh api repos/brave/brave-browser/releases/latest --jq '.tag_name')
+          STORED=$(cat version.txt)
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          if [ "$LATEST" = "$STORED" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Already up to date: $STORED"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "New version found: $LATEST (was: $STORED)"
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.changed == 'true'
+        run: sudo apt-get update -q && sudo apt-get install -y desktop-file-utils
+
+      - name: Build AppImages
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          chmod a+x brave-builder.sh
+          ./brave-builder.sh
+
+      - name: Publish release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.check.outputs.latest }}"
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest ./*.AppImage* \
+            --title "Brave Web Browser $VERSION" \
+            --notes "Automated AppImage build of Brave Browser $VERSION for Linux x86_64 and aarch64." \
+            --latest
+
+      - name: Update version.txt
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.check.outputs.latest }}" > version.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.txt
+          git commit -m "Brave ${{ steps.check.outputs.latest }}"
+          git push
