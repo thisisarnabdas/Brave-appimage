@@ -20,12 +20,3 @@ chmod a+x Brave-Web-Browser-*-x86_64.AppImage
 ./Brave-Web-Browser-*-x86_64.AppImage
 ```
 
-## Build locally
-
-```bash
-git clone https://github.com/thisisarnabdas/Brave-appimage
-cd Brave-appimage
-bash brave-builder.sh
-```
-
-Requires: `wget`, `curl`, `unzip`, `desktop-file-utils`
